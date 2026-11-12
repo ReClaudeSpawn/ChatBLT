@@ -1,0 +1,713 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatBLT</title>
+<style>
+  :root {
+    --bg: #fbf6ee;
+    --panel: #ffffff;
+    --ink: #2b2118;
+    --muted: #8a7a6a;
+    --line: #eadfce;
+    --bubble-me: #2b2118;
+    --bubble-me-ink: #fff8ee;
+    --bacon: #c2412d;
+    --bacon-dark: #8f2a1b;
+    --lettuce: #4caf50;
+    --bread: #e8b96a;
+    --chip: #f3e8d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1712;
+      --panel: #26201a;
+      --ink: #f4ead9;
+      --muted: #a8977f;
+      --line: #3a3027;
+      --bubble-me: #f4ead9;
+      --bubble-me-ink: #1c1712;
+      --chip: #332a21;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+    display: flex; flex-direction: column;
+  }
+
+  /* top bar */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 18px; }
+  .brand svg { width: 30px; height: 30px; }
+  .model {
+    font-size: 13px; color: var(--muted); background: var(--chip);
+    border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer;
+    user-select: none;
+  }
+
+  /* chat */
+  main { flex: 1; overflow-y: auto; }
+  .thread { max-width: 760px; margin: 0 auto; padding: 24px 16px 40px; }
+
+  .hero { text-align: center; padding: 40px 0 16px; }
+  .hero .big-blt { width: 140px; height: 140px; animation: bob 3s ease-in-out infinite; }
+  .hero h1 { font-size: 34px; margin: 8px 0 4px; letter-spacing: -0.5px; }
+  .hero p { color: var(--muted); margin: 0 auto; max-width: 460px; }
+  .suggest { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 18px; }
+  .suggest button {
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 12px; padding: 8px 12px; font: inherit; font-size: 14px; cursor: pointer; text-align: left;
+  }
+  .suggest button:hover { border-color: var(--bacon); }
+
+  .msg { display: flex; gap: 10px; margin: 18px 0; animation: pop .25s ease-out; }
+  .msg.me { justify-content: flex-end; }
+  .msg.me .bubble {
+    background: var(--bubble-me); color: var(--bubble-me-ink);
+    border-radius: 18px 18px 4px 18px; padding: 8px 14px; max-width: 75%;
+  }
+  .avatar { flex: 0 0 34px; width: 34px; height: 34px; }
+  .msg.bot .bubble { flex: 1; min-width: 0; padding-top: 4px; }
+  .msg.bot.thinking .avatar { animation: wobble .6s ease-in-out infinite; }
+
+  .think { color: var(--muted); font-style: italic; display: flex; align-items: center; gap: 8px; }
+  .dots span {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted); margin-right: 3px; animation: blink 1s infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: .15s; }
+  .dots span:nth-child(3) { animation-delay: .3s; }
+
+  .verdict { font-size: 15px; color: var(--muted); margin: 0 0 4px; }
+  .pick { font-size: clamp(28px, 6vw, 44px); font-weight: 800; line-height: 1.1; margin: 0 0 10px; letter-spacing: -0.5px; }
+  .pick em { font-style: normal; color: var(--bacon); }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 14px 16px; margin: 10px 0;
+  }
+  .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); overflow-wrap: anywhere; gap: 4px 12px; font-size: 15px; }
+  .facts dt { color: var(--muted); }
+  .facts dd { margin: 0; }
+  .meter { margin-top: 12px; }
+  .meter-label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+  .meter-bar { height: 10px; border-radius: 999px; background: var(--chip); overflow: hidden; margin-top: 4px; }
+  .meter-fill {
+    height: 100%; width: 0; border-radius: 999px;
+    background: repeating-linear-gradient(90deg, var(--bacon) 0 14px, var(--bacon-dark) 14px 20px);
+    transition: width 1.2s cubic-bezier(.2,.8,.2,1);
+  }
+  .quip { margin: 10px 0 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .actions button, .actions a {
+    font: inherit; font-size: 15px; border-radius: 999px; padding: 8px 16px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--panel); color: var(--ink); text-decoration: none;
+  }
+  .actions .primary { background: var(--bacon); border-color: var(--bacon); color: #fff; font-weight: 600; }
+  .actions button:disabled { opacity: .45; cursor: default; }
+
+  /* composer */
+  footer { padding: 8px 16px 12px; }
+  form {
+    max-width: 760px; margin: 0 auto; display: flex; gap: 8px; align-items: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 26px; padding: 6px 6px 6px 18px;
+    box-shadow: 0 4px 18px rgba(60, 40, 20, .08);
+  }
+  input {
+    flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink);
+    font: inherit; font-size: 16px; padding: 8px 0;
+  }
+  input::placeholder { color: var(--muted); }
+  form button {
+    width: 40px; height: 40px; border-radius: 50%; border: 0; cursor: pointer;
+    background: var(--ink); color: var(--bg); font-size: 20px; line-height: 1;
+  }
+  form button:disabled { opacity: .35; cursor: default; }
+  .fine { max-width: 760px; margin: 8px auto 0; text-align: center; font-size: 12px; color: var(--muted); }
+  .fine a { color: inherit; }
+
+  .confetti { position: fixed; top: -40px; font-size: 28px; pointer-events: none; animation: fall linear forwards; z-index: 9; }
+
+  @keyframes bob { 50% { transform: translateY(-8px) rotate(-2deg); } }
+  @keyframes wobble { 50% { transform: rotate(-10deg) scale(1.08); } }
+  @keyframes blink { 50% { opacity: .2; } }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- the talking sandwich -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="blt" viewBox="0 0 120 120">
+      <!-- bottom bread -->
+      <rect x="14" y="88" width="92" height="18" rx="5" fill="#f3d79a" stroke="#8a5a22" stroke-width="3"/>
+      <!-- bacon -->
+      <path d="M10 80 q10 -8 20 0 t20 0 t20 0 t20 0 t20 0 v8 q-10 -8 -20 0 t-20 0 t-20 0 t-20 0 t-20 0z"
+            fill="#c2412d" stroke="#8f2a1b" stroke-width="2.5" stroke-linejoin="round"/>
+      <path d="M14 82 q8 -5 16 0 t20 0 t20 0 t20 0 t16 0" fill="none" stroke="#f2c6a8" stroke-width="2"/>
+      <!-- tomato -->
+      <rect x="16" y="66" width="88" height="11" rx="5.5" fill="#e8463a" stroke="#a52a20" stroke-width="2.5"/>
+      <circle cx="36" cy="71.5" r="2" fill="#ffd6a0"/><circle cx="60" cy="71.5" r="2" fill="#ffd6a0"/><circle cx="84" cy="71.5" r="2" fill="#ffd6a0"/>
+      <!-- lettuce -->
+      <path d="M8 64 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 q6 -9 12 0 v4 h-104z"
+            fill="#5cbf4a" stroke="#2f7d2a" stroke-width="2.5" stroke-linejoin="round"/>
+      <!-- top bread -->
+      <!-- top bread: a toast slice, not a bun (this is a BLT, not a burger) -->
+      <path d="M14 60 V32 q-6 -2 -6 -9 q0 -15 20 -15 q10 -4 32 -4 q22 0 32 4 q20 0 20 15 q0 7 -6 9 V60 z"
+            fill="#c98a3d" stroke="#8a5a22" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M20 58 V30 q-5 -2 -5 -7 q0 -10 15 -10 q9 -3 30 -3 q21 0 30 3 q15 0 15 10 q0 5 -5 7 V58 z"
+            fill="#f3d79a"/>
+      <circle cx="30" cy="52" r="1.2" fill="#d9b46a"/><circle cx="90" cy="54" r="1.2" fill="#d9b46a"/>
+      <circle cx="60" cy="18" r="1.2" fill="#d9b46a"/><circle cx="96" cy="24" r="1.2" fill="#d9b46a"/>
+      <!-- face -->
+      <ellipse cx="45" cy="37" rx="7" ry="8.5" fill="#fff"/>
+      <ellipse cx="75" cy="37" rx="7" ry="8.5" fill="#fff"/>
+      <circle cx="47" cy="39" r="4" fill="#2b2118"/>
+      <circle cx="77" cy="39" r="4" fill="#2b2118"/>
+      <circle cx="48.5" cy="37.5" r="1.3" fill="#fff"/>
+      <circle cx="78.5" cy="37.5" r="1.3" fill="#fff"/>
+      <path d="M37 26 l14 3 M83 26 l-14 3" stroke="#6b4518" stroke-width="3" stroke-linecap="round"/>
+      <path d="M50 49 q10 8 20 0" fill="none" stroke="#6b4518" stroke-width="3" stroke-linecap="round"/>
+      <circle cx="35" cy="47" r="4" fill="#f08a6a" opacity=".5"/>
+      <circle cx="85" cy="47" r="4" fill="#f08a6a" opacity=".5"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header>
+  <div class="brand"><svg><use href="#blt"/></svg>ChatBLT</div>
+  <div class="model" id="model" title="Change model">BLT-4o (lightly toasted) ▾</div>
+</header>
+
+<main id="scroll">
+  <div class="thread" id="thread">
+    <div class="hero" id="hero">
+      <svg class="big-blt"><use href="#blt"/></svg>
+      <h1>Where should you eat lunch?</h1>
+      <p>Give me a zip code. I will consult my advanced sandwich intelligence and tell you exactly where to go. No arguments. Well, some arguments.</p>
+      <div class="suggest" id="suggest">
+        <button data-zip="90210">🌴 Try 90210</button>
+        <button data-zip="10001">🗽 Try 10001</button>
+        <button data-zip="60601">🌭 Try 60601</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <form id="form" autocomplete="off">
+    <input id="zip" inputmode="numeric" maxlength="10"
+           placeholder="Enter a zip code. I'm a sandwich, not a search engine." aria-label="Zip code">
+    <button id="send" type="submit" aria-label="Send">↑</button>
+  </form>
+  <div class="fine">
+    ChatBLT can make mistakes. So can you. Check important lunch info.
+    <span id="stat"></span>
+    Restaurant data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors.
+  </div>
+</footer>
+
+<script>
+// ---------- comedy department ----------
+const pickRand = a => a[Math.floor(Math.random() * a.length)];
+const between = (lo, hi, dp = 0) => +(lo + Math.random() * (hi - lo)).toFixed(dp);
+
+const THINKING = [
+  "Consulting the Bacon Council…",
+  "Toasting neural bread…",
+  "Asking the lettuce for its opinion…",
+  "The lettuce has no opinion. Asking the tomato…",
+  "Running 4 billion lunch simulations…",
+  "Calculating optimal crunch-to-chew ratio…",
+  "Ignoring your dietary preferences…",
+  "Reticulating sandwiches…",
+  "Checking Yelp reviews written by pigeons…",
+  "Training on the world's leftovers…",
+  "Defrosting a large language muffin…",
+  "Negotiating with the mayonnaise…",
+  "Downloading more bacon…",
+  "Converting zip code into vibes…",
+  "Panicking quietly…",
+];
+
+// shown when the free map servers are slow (they often are)
+const SLOW = [
+  "The map servers are slow today. I'm tapping my crust impatiently…",
+  "Still waiting. The internet is also on its lunch break…",
+  "Bribing the map server with a pickle…",
+  "Knocking on more map servers' doors…",
+  "This is taking a while. Good time to drink some water…",
+  "Still working! Sandwiches are patient. Mostly…",
+  "The map is loading at the speed of a sleepy turtle…",
+];
+
+const OPENERS = [
+  "After deep sandwich contemplation, the answer is clear:",
+  "I have consulted the ancient deli scrolls. You will go to:",
+  "My algorithm has spoken, and it is never wrong (it is often wrong):",
+  "Based on absolutely nothing you told me:",
+  "The bacon has spoken. You're going to:",
+  "I ran the numbers. Then I ate the numbers. Go to:",
+  "Lunch destiny located. Pack your appetite:",
+];
+
+const VERDICT_QUIPS = [
+  "Order something with bacon. Do it for me.",
+  "Tell them a sandwich sent you. They won't understand. Neither do I.",
+  "Trust me. I am made of food. I know food.",
+  "If it's bad, that's on you for listening to bread.",
+  "This decision is final, binding, and lightly toasted.",
+  "I'd come with you, but I have no legs. Or money. Or legs.",
+  "Go now, before you start overthinking. That's my job.",
+  "I've never been there. I've never been anywhere. I'm a sandwich.",
+];
+
+// gets meaner every reroll (but stays clean)
+const REROLL = [
+  ["Oh, so NOW you have standards.", "Fine. Let me spin the lettuce of fate again.", "Picky. Noted. Sigh.", "Okay, okay. Recalculating…"],
+  ["You reject food like a cat rejects a $40 bed.", "My crust is getting stale waiting on you.", "Do you also send soup back for being too wet?",
+   "Wow. I've met croutons with less attitude."],
+  ["You have the decision-making skills of a soggy napkin.", "I've seen pickles make faster choices, and pickles are dead.",
+   "At this point, the restaurants are rejecting YOU.", "My bacon is curling in frustration. Look what you did."],
+  ["You are why menus have pictures.", "I'm a sandwich and I'm STILL more decisive than you.",
+   "Somewhere, a gas station hot dog is waiting for you. It's what you deserve.",
+   "I'm starting to think you're not even hungry. You just like hurting sandwiches."],
+];
+const REROLL_LIMIT_LINES = [
+  "That's it. I'm not picking anymore. Go eat a granola bar in your car like a raccoon.",
+  "I have run out of restaurants AND patience. Starve, magnificently.",
+];
+
+const ACCEPT_LINES = [
+  "FINALLY. Go. Be free. Eat the lunch.",
+  "Excellent choice. By which I mean MY choice.",
+  "Wonderful. I'll be here, being a sandwich, if you need me.",
+  "Go forth and chew. Report back with crumbs.",
+];
+
+const OPEN_LINES = [
+  "Open now (according to the internet, bless its heart)",
+  "Open now. Probably. The map said so and maps don't lie. Usually.",
+  "Open right now. Go before they change their minds.",
+];
+const UNKNOWN_LINES = [
+  "Hours unknown. ChatBLT is {p}% sure they're open. Call ahead, chicken.",
+  "No hours listed. I'm {p}% sure they're open, which is a passing grade in sandwich school.",
+  "Hours: a mystery. Confidence they're open: {p}%. Bring a backup plan and a snack.",
+];
+
+const MODELS = [
+  "BLT-4o (lightly toasted)", "BLT-4.5 Turbo Crunch", "GPT-Grilled Cheese (deprecated)",
+  "Club Sandwich Ultra Max", "BLT-o1 Pickles Preview", "Reuben-2 (experimental, smells weird)",
+];
+
+// footer stat changes every visit, and is itself made up
+document.getElementById("stat").textContent =
+  `${between(61, 94, 1)}% of statistics on ChatBLT are made up, including this one.`;
+
+let modelIx = 0;
+document.getElementById("model").onclick = e => {
+  modelIx = (modelIx + 1) % MODELS.length;
+  e.target.textContent = MODELS[modelIx] + " ▾";
+};
+
+// ---------- data ----------
+// the free servers are often overloaded, so ask them all at once and take the first answer
+const OVERPASS = [
+  "https://overpass-api.de/api/interpreter",
+  "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass.private.coffee/api/interpreter",
+];
+const RADIUS_M = 5000;      // about 3 miles
+const GIVE_UP_MS = 80000;   // total patience for the restaurant servers
+const CACHE_HOURS = 12;     // restaurants don't move much; "open now" is re-checked every pick
+
+async function fetchTimeout(url, opts = {}, ms = 30000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  const outer = opts.signal;
+  if (outer) outer.addEventListener("abort", () => ctl.abort());
+  try { return await fetch(url, { ...opts, signal: ctl.signal }); }
+  finally { clearTimeout(t); }
+}
+
+function cacheGet(key) {
+  try {
+    const c = JSON.parse(localStorage.getItem(key));
+    if (c && Date.now() - c.t < CACHE_HOURS * 3600e3) return c.v;
+  } catch (e) {}
+  return null;
+}
+function cacheSet(key, v) {
+  try { localStorage.setItem(key, JSON.stringify({ t: Date.now(), v })); } catch (e) {}
+}
+
+async function lookupZip(zip) {
+  const r = await fetchTimeout(`https://api.zippopotam.us/us/${zip}`, {}, 15000);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error("zip lookup failed");
+  const j = await r.json();
+  const p = j.places[0];
+  return { lat: +p.latitude, lon: +p.longitude, town: p["place name"], state: p["state abbreviation"] };
+}
+
+async function findRestaurants(lat, lon) {
+  const key = `chatblt:${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  const sel = `["amenity"~"^(restaurant|fast_food|cafe)$"]["name"](around:${RADIUS_M},${lat},${lon})`;
+  const q = `[out:json][timeout:60];(node${sel};way${sel};);out center 250;`;
+  const deadline = Date.now() + GIVE_UP_MS;
+  const stop = new AbortController();
+
+  // keep pestering one server until it answers or we run out of patience
+  async function tryServer(url) {
+    let lastErr = new Error("no time left");
+    while (Date.now() < deadline - 2000 && !stop.signal.aborted) {
+      try {
+        const r = await fetchTimeout(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: "data=" + encodeURIComponent(q),
+          signal: stop.signal,
+        }, deadline - Date.now());
+        if (!r.ok) throw new Error("overpass " + r.status);
+        const j = await r.json();
+        return j.elements.map(el => ({
+          name: el.tags.name,
+          tags: el.tags,
+          lat: el.lat ?? el.center?.lat,
+          lon: el.lon ?? el.center?.lon,
+        })).filter(p => p.lat != null);
+      } catch (e) {
+        lastErr = e;
+        await sleep(3000 + Math.random() * 2000);  // busy server: wait a beat, then try again
+      }
+    }
+    throw lastErr;
+  }
+
+  try {
+    const list = await Promise.any(OVERPASS.map(tryServer));
+    cacheSet(key, list);
+    return list;
+  } finally {
+    stop.abort();  // tell the slowpokes to stop
+  }
+}
+
+// ---------- opening_hours (the common OSM formats; anything weird = "unknown") ----------
+const DAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];  // index = Date.getDay()
+const DAY_RE = "(?:Mo|Tu|We|Th|Fr|Sa|Su|PH|SH)";
+
+function parseHours(s) {
+  s = s.trim();
+  if (/^24\/7$/.test(s)) return "always";
+  // "Th 11:30-00:00, Fr 12:00-00:30" -> separate rules
+  s = s.replace(new RegExp(`(\\d)\\s*,\\s*(?=${DAY_RE}\\b)`, "g"), "$1;");
+  const sched = Array(7).fill(null);
+  const ruleRe = new RegExp(`^((?:${DAY_RE}(?:\\s*-\\s*${DAY_RE})?\\s*,?\\s*)+)?(.*)$`);
+  for (let rule of s.split(/;|\|\|/)) {
+    rule = rule.trim();
+    if (!rule) continue;
+    const m = rule.match(ruleRe);
+    const dayPart = (m[1] || "").trim(), rest = m[2].trim();
+    let days = [];
+    if (!dayPart) days = [0, 1, 2, 3, 4, 5, 6];
+    else {
+      for (let tok of dayPart.split(",")) {
+        tok = tok.trim();
+        if (!tok || tok === "PH" || tok === "SH") continue;
+        const [a, b] = tok.split(/\s*-\s*/).map(d => DAYS.indexOf(d));
+        if (a < 0 || (b !== undefined && b < 0)) return null;
+        if (b === undefined) { days.push(a); continue; }
+        for (let i = a; ; i = (i + 1) % 7) { days.push(i); if (i === b) break; }
+      }
+      if (!days.length) continue;  // a holidays-only rule
+    }
+    let ivs = [];
+    if (/^(off|closed)$/i.test(rest)) ivs = [];
+    else if (rest === "24/7" || rest === "00:00-24:00") ivs = [[0, 1440]];
+    else {
+      if (!rest) return null;
+      for (let t of rest.split(",")) {
+        t = t.trim();
+        let mm = t.match(/^(\d{1,2}):(\d{2})\s*-\s*(\d{1,2}):(\d{2})\+?$/);
+        if (mm) {
+          const st = +mm[1] * 60 + +mm[2];
+          let en = +mm[3] * 60 + +mm[4];
+          if (en <= st) en += 1440;  // closes after midnight
+          ivs.push([st, en]);
+          continue;
+        }
+        mm = t.match(/^(\d{1,2}):(\d{2})\+$/);
+        if (mm) { ivs.push([+mm[1] * 60 + +mm[2], 1440]); continue; }
+        return null;
+      }
+    }
+    for (const d of days) sched[d] = ivs;  // later rules override earlier ones
+  }
+  return sched;
+}
+
+// returns { open: true|false|null, closesIn: minutes|null }
+function openNow(hours, now = new Date()) {
+  if (!hours) return { open: null, closesIn: null };
+  const sched = parseHours(hours);
+  if (sched === null) return { open: null, closesIn: null };
+  if (sched === "always") return { open: true, closesIn: null };
+  const d = now.getDay(), t = now.getHours() * 60 + now.getMinutes();
+  for (const [st, en] of sched[d] || []) if (t >= st && t < en) return { open: true, closesIn: en - t };
+  for (const [, en] of sched[(d + 6) % 7] || []) if (en > 1440 && t < en - 1440) return { open: true, closesIn: en - 1440 - t };
+  return { open: false, closesIn: null };
+}
+
+function miles(aLat, aLon, bLat, bLon) {
+  const R = 3958.8, rad = x => x * Math.PI / 180;
+  const dLat = rad(bLat - aLat), dLon = rad(bLon - aLon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// ---------- chat UI ----------
+const thread = document.getElementById("thread");
+const scroller = document.getElementById("scroll");
+const form = document.getElementById("form");
+const input = document.getElementById("zip");
+const sendBtn = document.getElementById("send");
+const avatar = '<svg class="avatar"><use href="#blt"/></svg>';
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const scrollDown = () => scroller.scrollTo({ top: scroller.scrollHeight, behavior: "smooth" });
+
+function addMe(text) {
+  document.getElementById("hero")?.remove();
+  const el = document.createElement("div");
+  el.className = "msg me";
+  el.innerHTML = `<div class="bubble">${esc(text)}</div>`;
+  thread.append(el); scrollDown();
+}
+
+function addBot(html) {
+  const el = document.createElement("div");
+  el.className = "msg bot";
+  el.innerHTML = `${avatar}<div class="bubble">${html}</div>`;
+  thread.append(el); scrollDown();
+  return el;
+}
+
+// shows silly status lines until `work` finishes (and for at least minMs)
+async function think(work, minMs) {
+  const el = addBot(`<div class="think"><span class="dots"><span></span><span></span><span></span></span><span class="line"></span></div>`);
+  el.classList.add("thinking");
+  const line = el.querySelector(".line");
+  const lines = [...THINKING].sort(() => Math.random() - .5);
+  const slow = [...SLOW].sort(() => Math.random() - .5);
+  const t0 = Date.now();
+  let i = 0, k = 0;
+  line.textContent = lines[i++];
+  const timer = setInterval(() => {
+    // after a while, admit the map servers are dragging their feet
+    line.textContent = Date.now() - t0 > 12000 ? slow[k++ % slow.length] : lines[i++ % lines.length];
+  }, 1500);
+  try {
+    const [res] = await Promise.all([work, sleep(minMs)]);
+    return res;
+  } finally {
+    clearInterval(timer);
+    el.remove();
+  }
+}
+
+let busy = false;
+function setBusy(b) { busy = b; sendBtn.disabled = b; input.disabled = b; if (!b) input.focus(); }
+
+// one lunch session per zip code
+let session = null;
+
+async function ask(raw) {
+  if (busy) return;
+  const text = raw.trim();
+  if (!text) return;
+  addMe(text);
+  input.value = "";
+  const zip = (text.match(/\b\d{5}\b/) || [])[0];
+  if (!zip) {
+    addBot(pickRand([
+      "That is not a zip code. A zip code is five numbers. I'm a sandwich and even I know that.",
+      "I asked for a zip code and you gave me… that. Five digits, please. I believe in you. Barely.",
+      "Error 404: zip code not found in your message. Try again, champ.",
+    ]));
+    return;
+  }
+  setBusy(true);
+  try {
+    const place = await think((async () => {
+      const loc = await lookupZip(zip);
+      if (!loc) return { loc: null };
+      return { loc, list: await findRestaurants(loc.lat, loc.lon) };
+    })(), 3200);
+
+    if (!place.loc) {
+      addBot(`${esc(zip)}? That zip code doesn't exist. Did you make it up? Making things up is MY job.`);
+      return;
+    }
+    const now = new Date();
+    const scored = place.list.map(p => ({
+      ...p, ...openNow(p.tags.opening_hours, now),
+      dist: miles(place.loc.lat, place.loc.lon, p.lat, p.lon),
+    })).filter(p => p.open !== false);  // closed places are dead to me
+
+    if (!scored.length) {
+      addBot(`I searched every crumb within 5 miles of ${esc(place.loc.town)} and found nothing open. Have you considered… making a sandwich? I know a guy. It's me.`);
+      return;
+    }
+    session = { loc: place.loc, pool: scored, seen: new Set(), rerolls: 0 };
+    showPick(false);
+  } catch (e) {
+    console.error(e);
+    const el = addBot(`The restaurant database is out to lunch. Which, honestly, is ironic. The free map servers are swamped, so give it a minute and try again.
+      <div class="actions"><button class="primary" data-act="retry">Try again</button></div>`);
+    el.querySelector('[data-act="retry"]').onclick = e => { e.target.disabled = true; ask(zip); };
+  } finally {
+    setBusy(false);
+  }
+}
+
+function choose() {
+  const s = session;
+  let fresh = s.pool.filter(p => !s.seen.has(p));
+  if (!fresh.length) return null;
+  // prefer places we KNOW are open, but let a mystery spot sneak in sometimes
+  const known = fresh.filter(p => p.open === true), mystery = fresh.filter(p => p.open === null);
+  const bucket = known.length && (!mystery.length || Math.random() < 0.75) ? known : mystery;
+  const p = pickRand(bucket);
+  s.seen.add(p);
+  return p;
+}
+
+function describe(p) {
+  const t = p.tags;
+  const kinds = { restaurant: "Restaurant (a classic)", fast_food: "Fast food (\"fast\" is a promise, not a guarantee)", cafe: "Café (fancy word for coffee + snack)" };
+  const facts = [];
+  facts.push(["What", kinds[t.amenity] || "Food, presumably"]);
+  if (t.cuisine) facts.push(["Cuisine", t.cuisine.split(";").map(c => c.replace(/_/g, " ").trim()).join(", ")]);
+  facts.push(["Distance", `${p.dist.toFixed(1)} mi from the middle of ${session.loc.town} (ish)`]);
+  const addr = [t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" ");
+  if (addr) facts.push(["Address", addr + (t["addr:city"] ? ", " + t["addr:city"] : "")]);
+  let status;
+  if (p.open === true) {
+    status = pickRand(OPEN_LINES);
+    if (p.closesIn != null && p.closesIn <= 60) status = `Open, but closes in ${p.closesIn} min. RUN. Run like the wind.`;
+  } else {
+    status = pickRand(UNKNOWN_LINES).replace("{p}", between(41, 79));
+  }
+  facts.push(["Status", status]);
+  return facts;
+}
+
+function showPick(isReroll) {
+  const p = choose();
+  if (!p) {
+    addBot(`That's every restaurant near ${esc(session.loc.town)}. You rejected ALL of them. ${pickRand(REROLL_LIMIT_LINES)}`);
+    return;
+  }
+  const confidence = p.open === true ? between(87, 99.9, 1) : between(52, 78, 1);
+  const crunch = between(3, 11);
+  const facts = describe(p).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+  const mapUrl = `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lon}#map=18/${p.lat}/${p.lon}`;
+  const dirUrl = `https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lon}`;
+  const el = addBot(`
+    <p class="verdict">${esc(pickRand(OPENERS))}</p>
+    <p class="pick">Go eat at <em>${esc(p.name)}</em>.</p>
+    <div class="card">
+      <dl class="facts">${facts}</dl>
+      <div class="meter">
+        <div class="meter-label"><span>ChatBLT confidence</span><span>${confidence}%</span></div>
+        <div class="meter-bar"><div class="meter-fill"></div></div>
+      </div>
+      <div class="meter">
+        <div class="meter-label"><span>Crunch level</span><span>${crunch}/10</span></div>
+        <div class="meter-bar"><div class="meter-fill" data-w="${crunch * 10}"></div></div>
+      </div>
+    </div>
+    <p class="quip">${esc(pickRand(VERDICT_QUIPS))}</p>
+    <div class="actions">
+      <button class="primary" data-act="go">Fine. I'll go.</button>
+      <button data-act="again">Nah, something else</button>
+      <a href="${mapUrl}" target="_blank" rel="noopener">🗺️ Map</a>
+      <a href="${dirUrl}" target="_blank" rel="noopener">🚗 Directions</a>
+    </div>`);
+  const fills = el.querySelectorAll(".meter-fill");
+  setTimeout(() => {
+    fills[0].style.width = confidence + "%";
+    fills[1].style.width = fills[1].dataset.w + "%";
+  }, 60);
+  // only the newest pick's buttons work
+  thread.querySelectorAll(".actions button").forEach(b => { if (!el.contains(b)) b.disabled = true; });
+  el.querySelector('[data-act="again"]').onclick = reroll;
+  el.querySelector('[data-act="go"]').onclick = () => accept(el);
+}
+
+async function reroll() {
+  if (busy || !session) return;
+  session.rerolls++;
+  const tier = REROLL[Math.min(Math.floor((session.rerolls - 1) / 2), REROLL.length - 1)];
+  addMe(pickRand(["Nah.", "Something else.", "Eh, no.", "Not feeling it.", "Next!", "Hard pass."]));
+  setBusy(true);
+  addBot(esc(pickRand(tier)));
+  await think(Promise.resolve(), 1600);
+  setBusy(false);
+  if (session.rerolls >= 12) {
+    addBot(esc(pickRand(REROLL_LIMIT_LINES)) + " (Okay fine, ONE more.)");
+  }
+  showPick(true);
+}
+
+function accept(el) {
+  el.querySelectorAll(".actions button").forEach(b => b.disabled = true);
+  addMe("Fine. I'll go.");
+  addBot(esc(pickRand(ACCEPT_LINES)) + (session.rerolls ? ` (It only took you ${session.rerolls + 1} tries. A new personal worst.)` : " First try! You're my favorite human."));
+  confetti();
+}
+
+function confetti() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  for (let i = 0; i < 28; i++) {
+    const c = document.createElement("div");
+    c.className = "confetti";
+    c.textContent = pickRand(["🥓", "🥬", "🍅", "🍞", "🥓"]);
+    c.style.left = Math.random() * 100 + "vw";
+    c.style.animationDuration = between(2.2, 4.2, 2) + "s";
+    c.style.animationDelay = between(0, 0.6, 2) + "s";
+    document.body.append(c);
+    setTimeout(() => c.remove(), 5200);
+  }
+}
+
+form.onsubmit = e => { e.preventDefault(); ask(input.value); };
+document.getElementById("suggest").onclick = e => {
+  const b = e.target.closest("button[data-zip]");
+  if (b) ask(b.dataset.zip);
+};
+
+// ?zip=12345 jumps straight to a pick
+const qz = new URLSearchParams(location.search).get("zip");
+if (qz) ask(qz); else input.focus();
+</script>
+</body>
+</html>
